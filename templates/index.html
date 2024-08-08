@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Game with Hand Gesture Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .header {
+            text-align: center;
+            padding: 20px;
+            background-color: #4a4a4a;
+            color: white;
+        }
+        .container {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            padding: 20px;
+        }
+        .section {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        #maze {
+            display: grid;
+            grid-template-columns: repeat(9, 40px);
+            grid-template-rows: repeat(9, 40px);
+            gap: 1px;
+            background-color: black;
+            margin-top: 20px;
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            background-color: white;
+        }
+        .wall {
+            background-color: #333;
+        }
+        .player {
+            background-color: #ff4136;
+        }
+        .goal {
+            background-color: #2ecc40;
+        }
+        .refresh-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .refresh-button:hover {
+            background-color: #45a049;
+        }
+        #startButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #startButton:hover {
+            background-color: #45a049;
+        }
+        #videoFeed {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Maze Game with Hand Gesture Control</h1>
+    </div>
+    <div class="container">
+        <div class="section">
+            <h2>Hand Gesture Detection</h2>
+            <button id="startButton">Start Camera and Game</button>
+            <img id="videoFeed" src="{{ url_for('video_feed') }}" width="640" height="480">
+        </div>
+        <div class="section">
+            <h2>Maze Game</h2>
+            <div id="maze"></div>
+            <button id="refreshMaze" class="refresh-button">Refresh Maze</button>
+        </div>
+    </div>
+
+    <script>
+        let mazeLayout = [];
+        let maze;
+        let playerPosition = { x: 0, y: 0 };
+        let goalPosition = { x: 8, y: 8 };
+        let isGameStarted = false;
+        let eventSource;
+
+        function createMaze() {
+            mazeLayout = Array(9).fill().map(() => Array(9).fill(0));
+            
+            // Add random walls
+            for (let i = 0; i < 20; i++) {
+                let x = Math.floor(Math.random() * 9);
+                let y = Math.floor(Math.random() * 9);
+                if ((x !== 0 || y !== 0) && (x !== 8 || y !== 8)) {
+                    mazeLayout[y][x] = 1;
+                }
+            }
+
+            renderMaze();
+        }
+
+        function renderMaze() {
+            maze = document.getElementById('maze');
+            maze.innerHTML = '';
+            for (let y = 0; y < 9; y++) {
+                for (let x = 0; x < 9; x++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.id = `cell-${x}-${y}`;
+                    if (mazeLayout[y][x] === 1) {
+                        cell.classList.add('wall');
+                    }
+                    maze.appendChild(cell);
+                }
+            }
+            updatePlayerPosition();
+        }
+
+        function updatePlayerPosition() {
+            document.querySelectorAll('.player, .goal').forEach(el => {
+                el.classList.remove('player', 'goal');
+            });
+
+            document.getElementById(`cell-${playerPosition.x}-${playerPosition.y}`).classList.add('player');
+            document.getElementById(`cell-${goalPosition.x}-${goalPosition.y}`).classList.add('goal');
+        }
+
+        function movePlayer(direction) {
+            let newX = playerPosition.x;
+            let newY = playerPosition.y;
+
+            switch (direction) {
+                case 'up':
+                    newY = Math.max(0, playerPosition.y - 1);
+                    break;
+                case 'down':
+                    newY = Math.min(8, playerPosition.y + 1);
+                    break;
+                case 'left':
+                    newX = Math.max(0, playerPosition.x - 1);
+                    break;
+                case 'right':
+                    newX = Math.min(8, playerPosition.x + 1);
+                    break;
+            }
+
+            if (mazeLayout[newY][newX] !== 1) {
+                playerPosition.x = newX;
+                playerPosition.y = newY;
+                updatePlayerPosition();
+
+                if (playerPosition.x === goalPosition.x && playerPosition.y === goalPosition.y) {
+                    alert('Congratulations! You reached the goal!');
+                    playerPosition = { x: 0, y: 0 };
+                    createMaze();
+                }
+            }
+        }
+
+        document.getElementById('refreshMaze').addEventListener('click', function() {
+            playerPosition = { x: 0, y: 0 };
+            createMaze();
+        });
+
+        document.getElementById('startButton').addEventListener('click', function() {
+            if (!isGameStarted) {
+                fetch('/start_camera', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(data.status);
+                        if (data.status.includes("Error")) {
+                            alert(data.status);
+                        } else {
+                            document.getElementById('videoFeed').style.display = 'block';
+                            this.textContent = 'Stop Camera and Game';
+                            isGameStarted = true;
+                            startEventSource();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to start camera. Please check console for details.');
+                    });
+            } else {
+                document.getElementById('videoFeed').style.display = 'none';
+                this.textContent = 'Start Camera and Game';
+                isGameStarted = false;
+                if (eventSource) {
+                    eventSource.close();
+                }
+            }
+        });
+
+        function startEventSource() {
+            eventSource = new EventSource("{{ url_for('direction_events') }}");
+            eventSource.onmessage = function(event) {
+                if (isGameStarted) {
+                    movePlayer(event.data);
+                }
+            };
+        }
+
+        createMaze();
+    </script>
+</body>
+</html>
